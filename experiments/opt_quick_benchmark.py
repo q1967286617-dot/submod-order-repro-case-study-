@@ -1,16 +1,28 @@
+from __future__ import annotations
+
 import time
-import numpy as np
+
 import pandas as pd
 
-from src.utils.repro import set_global_seed
-from src.utils.io import make_run_dir, dump_config
 from src.mnl import generate_section5_instance
 from src.opt_mnl_cardinality import opt_mnl_cardinality
+from src.utils.io import dump_config, make_run_dir
+from src.utils.repro import set_global_seed
 
 
 def main():
-    config = {"n": 5000, "k_list": [10, 80, 600], "trials": 5, "base_seed": 20260227}
-    run_dir = make_run_dir("results", run_name="stage4_opt_smoke")
+    config = {
+        "experiment_name": "opt_quick_benchmark",
+        "n": 5000,
+        "k_list": [10, 80, 600],
+        "trials": 5,
+        "base_seed": 20260227,
+    }
+    run_name = (
+        f"{config['experiment_name']}_n{config['n']}_"
+        f"t{config['trials']}_{time.strftime('%Y%m%d_%H%M%S')}"
+    )
+    run_dir = make_run_dir("results", run_name=run_name)
     dump_config(run_dir, config)
 
     rows = []
@@ -38,8 +50,7 @@ def main():
                 }
             )
 
-    df = pd.DataFrame(rows)
-    df.to_csv(run_dir / "raw.csv", index=False)
+    pd.DataFrame(rows).to_csv(run_dir / "raw.csv", index=False)
     print(f"[OK] wrote {run_dir}")
 
 

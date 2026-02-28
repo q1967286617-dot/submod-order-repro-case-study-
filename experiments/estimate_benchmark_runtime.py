@@ -1,15 +1,17 @@
-# experiments/estimate_runtime_section5.py
 from __future__ import annotations
-import time
-import pandas as pd
-import numpy as np
 
-from src.utils.repro import set_global_seed
-from src.mnl import generate_section5_instance, order_by_price_desc
+import time
+
+import pandas as pd
+
 from src.alg1_cardinality import alg1_cardinality_mnl
+from src.mnl import generate_section5_instance, order_by_price_desc
 from src.opt_mnl_cardinality import opt_mnl_cardinality
+from src.utils.io import dump_config, make_run_dir
+from src.utils.repro import set_global_seed
 
 K_LIST = [1, 10, 80, 600, 2000, 10000, 25000, 45000]
+
 
 def one_trial(n: int, k: int, eps: float, seed: int) -> dict:
     rng = set_global_seed(seed)
@@ -34,21 +36,36 @@ def one_trial(n: int, k: int, eps: float, seed: int) -> dict:
         "ratio": alg.best_value / opt.opt_value if opt.opt_value > 0 else 1.0,
     }
 
+
 def main():
-    n = 50_000
-    eps = 0.1
-    trials_per_k = 5          # 先用5，想更稳改成10或20
-    base_seed = 20260227
+    config = {
+        "experiment_name": "runtime_projection",
+        "n": 50_000,
+        "eps": 0.1,
+        "k_list": K_LIST,
+        "trials_per_k": 5,
+        "projected_trials_per_k": 1000,
+        "base_seed": 20260227,
+    }
+
+    run_name = (
+        f"{config['experiment_name']}_n{config['n']}_"
+        f"sample{config['trials_per_k']}_{time.strftime('%Y%m%d_%H%M%S')}"
+    )
+    run_dir = make_run_dir("results", run_name=run_name)
+    dump_config(run_dir, config)
 
     rows = []
-    for k in K_LIST:
-        if k > n:
+    for k in config["k_list"]:
+        if k > config["n"]:
             continue
-        for t in range(trials_per_k):
-            seed = base_seed + k + t
-            rows.append(one_trial(n=n, k=k, eps=eps, seed=seed))
+        for t in range(config["trials_per_k"]):
+            seed = config["base_seed"] + k + t
+            rows.append(one_trial(n=config["n"], k=k, eps=config["eps"], seed=seed))
 
     df = pd.DataFrame(rows)
+    df.to_csv(run_dir / "raw.csv", index=False)
+
     summary = df.groupby("k", as_index=False).agg(
         mean_ALG_ms=("ALG_ms", "mean"),
         mean_OPT_ms=("OPT_ms", "mean"),
@@ -56,12 +73,16 @@ def main():
     )
     summary["mean_total_ms_per_trial"] = summary["mean_ALG_ms"] + summary["mean_OPT_ms"]
 
-    # 外推到论文设定：每个k 1000 trials（串行）
-    summary["projected_total_seconds_for_1000_trials"] = summary["mean_total_ms_per_trial"] * 1000.0 / 1000.0
-    projected_total_seconds = summary["projected_total_seconds_for_1000_trials"].sum()
+    projected_trials = float(config["projected_trials_per_k"])
+    summary["projected_total_seconds"] = summary["mean_total_ms_per_trial"] * projected_trials / 1000.0
+    summary.to_csv(run_dir / "summary.csv", index=False)
+
+    projected_total_seconds = float(summary["projected_total_seconds"].sum())
 
     print(summary)
-    print("\nProjected total (serial) seconds for Section5:", projected_total_seconds)
+    print(f"\nProjected total (serial) seconds: {projected_total_seconds:.2f}")
+    print(f"[OK] wrote: {run_dir}")
+
 
 if __name__ == "__main__":
     main()

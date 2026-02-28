@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import time
-from dataclasses import asdict
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
-from src.utils.repro import set_global_seed
-from src.utils.io import make_run_dir, dump_config
-from src.mnl import generate_section5_instance, order_by_price_desc
 from src.alg1_cardinality import alg1_cardinality_mnl
+from src.mnl import generate_section5_instance, order_by_price_desc
 from src.opt_mnl_cardinality import opt_mnl_cardinality
+from src.utils.io import dump_config, make_run_dir
+from src.utils.repro import set_global_seed
 
 
 def run_one(trial_id: int, base_seed: int, n: int, k: int, eps: float) -> dict:
@@ -31,7 +30,7 @@ def run_one(trial_id: int, base_seed: int, n: int, k: int, eps: float) -> dict:
     opt_ms = (time.perf_counter() - t1) * 1000.0
 
     ratio = alg.best_value / opt.opt_value if opt.opt_value > 0 else 1.0
-    ok = (alg.best_value <= opt.opt_value + 1e-9)  # allow tiny numeric tolerance
+    ok = alg.best_value <= opt.opt_value + 1e-9
 
     return {
         "k": k,
@@ -53,18 +52,21 @@ def run_one(trial_id: int, base_seed: int, n: int, k: int, eps: float) -> dict:
 
 
 def main():
-    # —— 小规模对拍配置（阶段5）——
     config = {
-        "stage": 5,
-        "n": 50000,                 # 小规模，用于端到端验证
-        "k_list": [1, 10, 80, 600, 2000, 10000, 25000, 45000],  # 3~5 个值即可，注意 k <= n
-        "trials_per_k": 200,
+        "experiment_name": "alg1_vs_opt_benchmark",
+        "n": 50_000,
+        "k_list": [1, 10, 80, 600, 2000],
+        "trials_per_k": 5,
         "eps": 0.1,
         "base_seed": 20260225,
-        "note": "Stage5 end-to-end sanity check: ALG vs OPT + plotting",
+        "note": "End-to-end benchmark: ALG1 vs OPT with plotting.",
     }
 
-    run_dir = make_run_dir("results", run_name="stage5_end2end_small_trial5")
+    run_name = (
+        f"{config['experiment_name']}_n{config['n']}_"
+        f"t{config['trials_per_k']}_{time.strftime('%Y%m%d_%H%M%S')}"
+    )
+    run_dir = make_run_dir("results", run_name=run_name)
     dump_config(run_dir, config)
 
     rows = []
@@ -77,14 +79,12 @@ def main():
     df = pd.DataFrame(rows)
     df.to_csv(run_dir / "raw.csv", index=False)
 
-    # 汇总：同时算 ratio-of-averages（论文口径）和 average-of-ratios（诊断口径）
-    g = df.groupby("k", as_index=False)
-    summary = g.agg(
+    summary = df.groupby("k", as_index=False).agg(
         mean_ALG=("ALG", "mean"),
         std_ALG=("ALG", "std"),
         mean_OPT=("OPT", "mean"),
         std_OPT=("OPT", "std"),
-        ratio_of_averages=("ALG", lambda x: float(x.mean())),  # 临时占位，下面会重算
+        ratio_of_averages=("ALG", lambda x: float(x.mean())),
         mean_ratio=("ratio", "mean"),
         std_ratio=("ratio", "std"),
         pass_rate_ALG_le_OPT=("ALG_le_OPT", "mean"),
@@ -94,42 +94,34 @@ def main():
         n=("trial", "count"),
     )
 
-    # 正确重算 ratio_of_averages = mean(ALG)/mean(OPT)
     summary["ratio_of_averages"] = summary["mean_ALG"] / summary["mean_OPT"]
-
     summary.to_csv(run_dir / "summary.csv", index=False)
 
-    # —— 画图：Figure1 风格诊断版 —— #
-    # 1) y = ratio_of_averages（论文口径），误差棒先用 per-trial ratio 的 std（诊断用）
     x = np.log2(summary["k"].to_numpy(dtype=float))
-    y_roa = (summary["ratio_of_averages"].to_numpy(dtype=float)) * 100.0
-    yerr = (summary["std_ratio"].to_numpy(dtype=float)) * 100.0
+    y_roa = summary["ratio_of_averages"].to_numpy(dtype=float) * 100.0
+    y_aor = summary["mean_ratio"].to_numpy(dtype=float) * 100.0
+    yerr = summary["std_ratio"].to_numpy(dtype=float) * 100.0
 
-    color_main = '#E0892B'
-    color_ref = '#2980B9'
+    color_main = "#E0892B"
+    color_ref = "#2980B9"
 
     plt.figure()
-    plt.errorbar(x, y_roa, yerr=yerr, fmt="o-", capsize=3, color=color_main, ecolor=color_main)   # 误差棒颜色
-    plt.axhline(y=100, color=color_ref, linestyle='--', alpha=0.8, zorder=0)
-
-    plt.xlabel("log(k)")
+    plt.errorbar(x, y_roa, yerr=yerr, fmt="o-", capsize=3, color=color_main, ecolor=color_main)
+    plt.axhline(y=100, color=color_ref, linestyle="--", alpha=0.8, zorder=0)
+    plt.xlabel("log2(k)")
     plt.ylabel("100 * Average(ALG) / Average(OPT)")
-    plt.title("Performance of ALG1")
+    plt.title("ALG1 vs OPT: Ratio of Averages")
     plt.tight_layout()
-    plt.savefig("performance_of_alg1.png", dpi=180)
-
-    # 2) 额外画 average-of-ratios，方便看两者差异（论文说质性一致）
-    y_aor = (summary["mean_ratio"].to_numpy(dtype=float)) * 100.0
+    plt.savefig(run_dir / "alg1_vs_opt_ratio_of_averages.png", dpi=180)
 
     plt.figure()
     plt.errorbar(x, y_aor, yerr=yerr, fmt="o-", capsize=3, color=color_main, ecolor=color_main)
-    plt.xlabel("log(k)")
+    plt.axhline(y=100, color=color_ref, linestyle="--", alpha=0.8, zorder=0)
+    plt.xlabel("log2(k)")
     plt.ylabel("100 * Average(ALG/OPT)")
-    plt.axhline(y=100, color=color_ref, linestyle='--', alpha=0.8, zorder=0)
-
-    plt.title("Stage5 Sanity: average-of-ratios (errorbar=std of trial ratios)")
+    plt.title("ALG1 vs OPT: Average of Ratios")
     plt.tight_layout()
-    plt.savefig("stage5_average_of_ratios.png", dpi=180)
+    plt.savefig(run_dir / "alg1_vs_opt_average_of_ratios.png", dpi=180)
 
     print(f"[OK] wrote: {run_dir}")
     print(summary[["k", "ratio_of_averages", "mean_ratio", "pass_rate_ALG_le_OPT", "mean_ALG_ms", "mean_OPT_ms"]])

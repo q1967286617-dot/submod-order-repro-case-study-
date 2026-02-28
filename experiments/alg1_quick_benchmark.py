@@ -1,25 +1,29 @@
 from __future__ import annotations
 
 import time
-import pandas as pd
-import numpy as np
 
-from src.utils.repro import set_global_seed
-from src.utils.io import make_run_dir, dump_config
-from src.mnl import generate_section5_instance, order_by_price_desc
+import pandas as pd
+
 from src.alg1_cardinality import alg1_cardinality_mnl
+from src.mnl import generate_section5_instance, order_by_price_desc
+from src.utils.io import dump_config, make_run_dir
+from src.utils.repro import set_global_seed
 
 
 def main():
     config = {
-        "stage": 3,
+        "experiment_name": "alg1_quick_benchmark",
         "n": 5000,
         "k_list": [10, 80, 600],
         "eps": 0.1,
         "trials": 5,
         "base_seed": 20260227,
     }
-    run_dir = make_run_dir("results", run_name="stage3_alg1_smoke")
+    run_name = (
+        f"{config['experiment_name']}_n{config['n']}_"
+        f"t{config['trials']}_{time.strftime('%Y%m%d_%H%M%S')}"
+    )
+    run_dir = make_run_dir("results", run_name=run_name)
     dump_config(run_dir, config)
 
     rows = []
