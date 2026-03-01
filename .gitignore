@@ -3,7 +3,5 @@ __pycache__/
 .ipynb_checkpoints/
 .venv/
 .env
-.results/
-results/
 .DS_Store
 .pytest_cache/

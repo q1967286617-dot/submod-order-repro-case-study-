@@ -230,3 +230,5 @@ Common columns include:
 ## License and Citation
 
 This repository is for coursework/reproduction use. If you publish results based on this code, cite the original paper.
+
+Rajan Udwania. *Submodular Order Functions and Assortment Optimization*. **Management Science** 71(1):202–218 (January 2025). Published online April 1, 2024. DOI: 10.1287/mnsc.2021.04108.

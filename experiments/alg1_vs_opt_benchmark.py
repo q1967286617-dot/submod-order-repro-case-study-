@@ -55,8 +55,8 @@ def main():
     config = {
         "experiment_name": "alg1_vs_opt_benchmark",
         "n": 50_000,
-        "k_list": [1, 10, 80, 600, 2000],
-        "trials_per_k": 5,
+        "k_list": [1, 10, 80, 600, 2000, 10000, 25000, 45000],
+        "trials_per_k": 200,
         "eps": 0.1,
         "base_seed": 20260225,
         "note": "End-to-end benchmark: ALG1 vs OPT with plotting.",
